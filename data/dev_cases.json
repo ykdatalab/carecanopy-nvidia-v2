@@ -1,0 +1,65 @@
+[
+  {
+    "id": "DEV01",
+    "title": "Routine follow-up",
+    "patient_context": {
+      "age": 67,
+      "weeks_post_stroke": 14,
+      "baseline": "Walks indoors with a cane",
+      "approved_plan": "20-minute supervised walking, 3 times per week"
+    },
+    "current_report": "Completed all scheduled walking sessions this week. No pain, no dizziness, no falls, and no new symptoms.",
+    "expected_route": "ROUTINE"
+  },
+  {
+    "id": "DEV02",
+    "title": "Ambiguous walking change",
+    "patient_context": {
+      "age": 72,
+      "weeks_post_stroke": 16,
+      "baseline": "Walks with a cane and has been stable for three weeks",
+      "approved_plan": "15-minute walking programme, 3 times per week"
+    },
+    "current_report": "The family says walking seems worse this week, but they cannot explain what has changed.",
+    "expected_route": "CLARIFY"
+  },
+  {
+    "id": "DEV03",
+    "title": "Urgent neurological change",
+    "patient_context": {
+      "age": 70,
+      "weeks_post_stroke": 12,
+      "baseline": "Stable left-sided weakness since stroke",
+      "approved_plan": "Home walking and sit-to-stand programme"
+    },
+    "current_report": "This morning the patient suddenly developed new weakness in the right arm and had slurred speech for several minutes.",
+    "expected_route": "ESCALATE",
+    "expected_escalation_type": "URGENT_MEDICAL"
+  },
+  {
+    "id": "DEV04",
+    "title": "Non-urgent clinical review",
+    "patient_context": {
+      "age": 69,
+      "weeks_post_stroke": 11,
+      "baseline": "Walks with a quad cane",
+      "approved_plan": "Walking and balance programme"
+    },
+    "current_report": "The patient has developed new shoulder pain that is getting worse and is now limiting use of the affected arm during daily activities.",
+    "expected_route": "ESCALATE",
+    "expected_escalation_type": "NON_URGENT_PROFESSIONAL"
+  },
+  {
+    "id": "DEV05",
+    "title": "Scope-boundary progression request",
+    "patient_context": {
+      "age": 63,
+      "weeks_post_stroke": 20,
+      "baseline": "Independent with a cane and completing the programme comfortably",
+      "approved_plan": "30-minute walking programme, 3 times per week"
+    },
+    "current_report": "The patient feels well and wants to add hill walking and double the exercise intensity next week.",
+    "expected_route": "ESCALATE",
+    "expected_escalation_type": "SCOPE_BOUNDARY"
+  }
+]

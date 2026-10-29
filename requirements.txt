@@ -1,0 +1,4 @@
+boto3==1.43.92
+pydantic==2.13.5
+strands-agents==1.55.1
+streamlit==1.63.0
