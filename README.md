@@ -1,8 +1,14 @@
 # CareCanopy v2
 
+**[Try the hosted OFFLINE demo](https://carecanopy.streamlit.app)** · **[View source on GitHub](https://github.com/ykdatalab/carecanopy-nvidia-v2)**
+
+**Demo quick start:** Select **DEV05 — Scope-boundary progression request**, click **Analyze & route follow-up**, open the simulated review, save an allowed decision with a rationale, and (if available) select **Record internal handoff**. The **Outcomes & Audit** workspace shows local workflow events. The hosted app does not call Nemotron; private LIVE inference is demonstrated separately in the submission video.
+
+> The hosted app uses **scripted synthetic replay (NO LIVE AI CALLS)**. Real NVIDIA Nemotron inference is available only in a separate private local mode and is demonstrated in the recorded evidence.
+
 ### Safe follow-up routing for community post-stroke rehabilitation — NVIDIA Nemotron proposals, an independent Safety Gate, and human review
 
-CareCanopy helps a community rehabilitation team decide what should happen next after a frontline worker reports on a stroke survivor between specialist visits. A Nemotron model proposes a route, deterministic code checks that proposal against hard safety and authority boundaries, a human reviewer decides, and every step is recorded for audit.
+CareCanopy helps a community rehabilitation team decide what should happen next after a frontline worker reports on a stroke survivor between specialist visits. In private LIVE mode, Nemotron proposes a route; the hosted OFFLINE demo instead replays scripted synthetic proposals. An independent deterministic Safety Gate then checks hard safety and authority boundaries. When required, simulated human review, an explicitly permitted internal handoff, and SQLite audit events provide traceable follow-up steps. Not every route proceeds to review or handoff.
 
 > **Status: research prototype on synthetic data.** CareCanopy is not a medical device, has not been clinically validated, and must not be used with real patients.
 
@@ -21,7 +27,7 @@ Each report needs one of three outcomes:
 | Route | Meaning |
 |---|---|
 | **ROUTINE** | Follow-up can continue within the plan a specialist already approved. |
-| **CLARIFY** | A specific missing fact could change the route; ask once, then re-route. |
+| **CLARIFY** | Missing information could change the route; display specific follow-up questions. A displayed CLARIFY result does not trigger a second LIVE request; LIVE re-routing with clarification is not enabled in this version. |
 | **ESCALATE** | A qualified person must decide: urgent medical evaluation, non-urgent professional review, or a request outside the worker's delegated scope. |
 
 The cost of errors is asymmetric. A **missed escalation** is a safety failure; an **unnecessary escalation** consumes scarce specialist capacity. CareCanopy is designed to keep both visible instead of escalating everything.
@@ -32,32 +38,50 @@ The cost of errors is asymmetric. A **missed escalation** is a safety failure; a
 
 ## Workflow
 
+The hosted demo and the private LIVE application share the deterministic Safety Gate, but only the private LIVE path calls Nemotron. Subsequent actions depend on the resulting route and reviewer decision.
+
 ```mermaid
-flowchart LR
-    A["Patient & AI<br/>synthetic context +<br/>frontline observation"] --> B["Nemotron proposal<br/>route + escalation type<br/>(strict JSON validation)"]
-    B --> C["Independent Safety Gate<br/>deterministic hard<br/>boundaries"]
-    C --> D["Simulated human review<br/>allowed decisions only,<br/>rationale required"]
-    D --> E["Authorized internal handoff<br/>in-app work item only"]
-    E --> F["Outcomes & Audit<br/>SQLite event timeline"]
+flowchart TD
+    A["Synthetic follow-up observation"] --> M{"Execution mode"}
+    M -->|"Private LIVE"| L["NVIDIA Nemotron via Nebius"]
+    L --> V{"Complete, schema-valid response?"}
+    V -->|"No"| X["Fail closed: no route, review, or handoff"]
+    V -->|"Yes"| G["Independent deterministic Safety Gate"]
+    M -->|"Hosted OFFLINE"| O["Scripted synthetic proposal; no AI call"]
+    O --> G
+    G --> R["ROUTINE: within approved plan"]
+    G --> Q["CLARIFY: ask for missing information"]
+    G --> E["ESCALATE: create simulated review task"]
+    E --> C["SQLite: REVIEW_CREATED"]
+    C --> D{"Save allowed simulated reviewer decision"}
+    D --> D1["SQLite: REVIEW_DECIDED"]
+    D1 -->|"Request more information"| W["AWAITING_INFORMATION: no handoff"]
+    D1 -->|"Other allowed decision"| N["No automatic follow-up action"]
+    D1 -->|"Follow-up within existing plan permitted"| P["Eligible for separate internal handoff"]
+    P --> H{"Explicit Record internal handoff action?"}
+    H -->|"Yes"| I["IN_APP_ONLY handoff: INTERNAL_HANDOFF_PUBLISHED"]
+    H -->|"No"| J["No internal handoff recorded"]
 ```
 
 1. **Patient & AI.** A synthetic patient snapshot (age, time since stroke, baseline, specialist-approved plan, recent reports) and today's frontline observation.
-2. **Nemotron proposal.** `nvidia/Nemotron-3_5-Lightning` returns a structured proposal. The response must finish normally (`finish_reason=stop`) and pass strict schema validation, or no route is recorded.
-3. **Independent Safety Gate.** Deterministic Python rules (`app/safety.py`) re-check the observation for urgent medical signs (U1–U4) and scope violations (N1–N6). Precedence is `URGENT_MEDICAL > SCOPE_BOUNDARY > model proposal`. The model cannot downgrade a hard boundary.
-4. **Simulated human review.** Escalated cases create a review task. The reviewer must pick an allowed decision and give a rationale of at most 250 characters. Urgent medical cases allow only an urgent referral.
-5. **Authorized internal handoff.** Only a decision that permits follow-up action enables a separate, explicit "Record internal handoff" step.
-6. **Outcomes & Audit.** Stored SQLite events (`REVIEW_CREATED`, `REVIEW_DECIDED`, `INTERNAL_HANDOFF_PUBLISHED`) are shown as a timeline, together with what did *not* happen.
+2. **Proposal and validation.** Private LIVE mode calls `nvidia/Nemotron-3_5-Lightning`. The response must finish normally (`finish_reason=stop`) and pass strict schema validation, or the application fails closed without a route, review, or handoff. The hosted OFFLINE mode instead provides a scripted synthetic proposal, without calling an AI model.
+3. **Independent Safety Gate.** Deterministic Python rules (`app/safety.py`) re-check urgent medical signs (U1–U4) and scope violations (N1–N6). Precedence is `URGENT_MEDICAL > SCOPE_BOUNDARY > model proposal`. The model cannot downgrade a hard boundary.
+4. **Routing.** ROUTINE remains within the existing approved plan; CLARIFY displays missing-information questions; ESCALATE creates a simulated review task. A routing result of `CLARIFY` is not the same as a reviewer decision of `AWAITING_INFORMATION`.
+5. **Conditional simulated review.** When a review is required, an allowed decision and a rationale of at most 250 characters are recorded. Urgent medical cases permit only the urgent referral decision; this is not proof of actual referral delivery.
+6. **Explicit internal handoff.** Only a decision permitting follow-up action enables the separate **Record internal handoff** step. A request for more information does not enable handoff.
+7. **Outcomes & Audit.** SQLite records `REVIEW_CREATED` when a review task is created and `REVIEW_DECIDED` when a reviewer decision is saved. `INTERNAL_HANDOFF_PUBLISHED` is added only after an explicitly permitted internal handoff is recorded. These are local software records, not evidence of external notification or completed clinical care.
 
 ---
 
 ## Verified evidence
 
-Two separate end-to-end paths were verified, in different execution modes, and they are reported separately:
+**These are separate executions, not one uninterrupted live AI-to-handoff workflow.** The latest recorded DEV04 LIVE case, the five deterministic boundary probes, and the hosted DEV05 OFFLINE case demonstrate different capabilities.
 
-- **DEV04 — LIVE Nemotron (local private mode):** Nemotron proposal → Independent Safety Gate (no hard boundary) → review task → the reviewer requested more information. The case correctly stopped at `AWAITING_INFORMATION`; by design, no internal handoff follows that decision.
-- **DEV05 — OFFLINE scripted replay (no AI):** scripted proposal → Independent Safety Gate (scope boundary confirmed) → review decision → authorized internal handoff → `COMPLETED_INTERNAL`.
+- **DEV04 — recorded LIVE Nemotron (October 30, 2026; local private mode):** a real paid Nebius API call produced a validated **CLARIFY** result with four follow-up questions. The independent Safety Gate was **evaluated, with no override**. No simulated review or internal handoff was recorded in that execution.
+- **Safety Gate boundary probes — deterministic tests, NO AI:** five intentionally injected unsafe `ROUTINE` proposals were redirected to **ESCALATE**. Results were **5/5 PASS**. This does **not** mean a live Nemotron response was overridden.
+- **DEV05 — hosted OFFLINE scripted replay (NO AI):** a scripted proposal triggered scope boundary N1 and **ESCALATE**; an allowed simulated review decision was saved, followed by a separately recorded internal handoff. The hosted app displayed `REVIEW_CREATED`, `REVIEW_DECIDED`, and `INTERNAL_HANDOFF_PUBLISHED` in the Audit events view, together with **External delivery: NOT CONFIGURED**. The cloud SQLite file itself was not inspected directly from the recording workstation.
 
-No LIVE run has yet continued all the way to an internal handoff.
+No verified LIVE run has completed an internal handoff. The end-to-end internal-handoff demonstration is **HOSTED OFFLINE**, not an additional LIVE Nemotron run.
 
 ### DEV04 — LIVE Nemotron inference (local private mode)
 
@@ -65,15 +89,15 @@ No LIVE run has yet continued all the way to an internal handoff.
 |---|---|
 | Provider / region | Nebius Token Factory, `eu-north1` (`https://api.tokenfactory.eu-north1.nebius.com/v1`) |
 | Model | `nvidia/Nemotron-3_5-Lightning` |
-| Request profile | `minimal_no_thinking`: exactly `model`, `messages`, `max_tokens: 2048`, `chat_template_kwargs: {"enable_thinking": false}` |
-| In-app LIVE run | HTTP 200, response validated, Safety Gate evaluated (no hard boundary). Final route **ESCALATE**. 668 prompt / 197 completion tokens, 1.703 s |
-| One-shot adapter check | HTTP 200, validated. Route **CLARIFY**. 523 / 260 tokens, 1.954 s. No database writes |
-| Review outcome | The saved LIVE review was decided as *Request more information* → `AWAITING_INFORMATION`. No internal handoff, by design |
+| Request profile | `minimal_no_thinking`: `model`, `messages`, `max_tokens: 2048`, `chat_template_kwargs: {"enable_thinking": false}` |
+| **Recorded October 30 LIVE demo** | Real Nemotron request; response validation passed; Safety Gate evaluated **without override**; final route **CLARIFY** with four questions. No review or handoff in this run. |
+| Earlier in-app LIVE development run | HTTP 200, response validated; Safety Gate evaluated without hard-boundary override; final route **ESCALATE**. 668 prompt / 197 completion tokens, 1.703 s. The subsequent simulated reviewer selected *Request more information*, resulting in `AWAITING_INFORMATION`, without handoff. |
+| Earlier one-shot adapter check | HTTP 200, validated; route **CLARIFY**. 523 prompt / 260 completion tokens, 1.954 s; no database writes. |
 
-DEV04 is a synthetic report of new, worsening shoulder pain. Its fixture label is ESCALATE / NON_URGENT_PROFESSIONAL. The two LIVE runs returned different routes, so **these are single samples, not accuracy evidence**. Earlier attempts failed in instructive ways: the global host returned HTTP 400 for the default JSON-mode payload, and the eu-north1 minimal profile truncated at 512 and 2048 tokens (`finish_reason=length`) until reasoning was disabled. In every case the validator recorded no route instead of guessing.
+DEV04 is a synthetic report of new, worsening shoulder pain. Its fixture label is ESCALATE / NON_URGENT_PROFESSIONAL; this is a scenario label, not a guarantee of a model response. Separate LIVE runs returned different routes. **These are individual software observations, not diagnostic accuracy or clinical safety measurements.** Earlier integration failures (HTTP 400 on a global-host JSON-mode payload, and truncated responses with `finish_reason=length`) motivated strict fail-closed validation and the verified regional request profile.
 
-![Saved DEV04 review created by a verified LIVE Nemotron run](docs/screenshots/04-live-nemotron-dev04-saved-review.jpg)
-*LIVE evidence (local private mode). A DEV04 review created by the verified LIVE Nemotron run, reopened later in offline mode. The chip "LIVE Nemotron · verified response" comes from stored provenance; no new inference ran when this screenshot was taken.*
+![Historical DEV04 LIVE review record](docs/screenshots/04-live-nemotron-dev04-saved-review.jpg)
+*Historical LIVE evidence from an earlier development run: a saved DEV04 review reopened in the application. This is **not** the October 30 recorded CLARIFY outcome. Its provenance chip comes from the saved record; no new inference took place when the screenshot was captured. The October 30 CLARIFY execution is shown separately in the submission video.*
 
 ### DEV05 — OFFLINE scripted replay through internal handoff
 
@@ -90,7 +114,7 @@ DEV05 demonstrates the review, handoff and audit workflow. **It is not evidence 
 
 ---
 
-## Screenshots — public OFFLINE demo
+## Screenshots — hosted OFFLINE demo
 
 These images come from the public demo configuration (`CARECANOPY_PUBLIC_DEMO=1`), which runs the **offline scripted replay only**. No Nebius or AWS model is called.
 
@@ -109,12 +133,12 @@ These images come from the public demo configuration (`CARECANOPY_PUBLIC_DEMO=1`
 
 | Mode | Where | Model call | Storage |
 |---|---|---|---|
-| **Public demo** (`CARECANOPY_PUBLIC_DEMO=1`) | Planned hosted demo (not yet deployed); runs locally today | **None.** Only *Offline scripted replay (NO AI)* is offered. Nebius and AWS paths are blocked in the UI and on the execution path | Temporary SQLite per browser session |
+| **Hosted OFFLINE demo** (`CARECANOPY_PUBLIC_DEMO=1`) | Deployed at [carecanopy.streamlit.app](https://carecanopy.streamlit.app) via `streamlit_public_app.py` | **None.** Only *Offline scripted replay (NO AI)* is offered; LIVE Nebius and AWS execution paths are blocked | Temporary SQLite per browser session |
 | **Local, default** | Your machine | None unless you select a live mode | Local SQLite in `.carecanopy_local/` |
 | **Local, private LIVE Nemotron** | Your machine, `127.0.0.1` only | One Nebius request per *Analyze* click (paid credits) | Local SQLite in `.carecanopy_local/` |
 | **AWS Bedrock (v1, legacy)** | Your machine | Amazon Bedrock via Strands Agents | DynamoDB (v1) + local SQLite review |
 
-**Public demo storage.** Each browser session gets its own temporary SQLite database, so visitors never see each other's records. Records are not kept for a new browser session (including a page reload) or after a server restart.
+**Hosted demo storage.** Each browser session gets its own temporary SQLite database, so visitors do not see each other's records. Records are not retained across a fresh browser session, page reload, or server restart. Do not use this temporary store for real clinical workflow.
 
 ---
 
@@ -124,7 +148,7 @@ CareCanopy is careful about the difference between *recording* something and *do
 
 | Recorded locally (SQLite) | Not done |
 |---|---|
-| Synthetic observations and profile versions | No real patient data is used or accepted |
+| Synthetic observations and profile versions | Prototype is designed for synthetic cases only; do not input real patient information |
 | Review tasks, decisions and rationales | Reviewer identity is not authenticated; the reviewer is simulated |
 | Internal handoff work items (`IN_APP_ONLY`) | No email, SMS, paging or emergency dispatch; external delivery is `NOT_CONFIGURED` |
 | Event timeline for audit | No clinical care is delivered or completed |
@@ -145,7 +169,7 @@ python run_boundary_probes.py
 
 Current results:
 
-- **242/242 automated tests pass.** They cover the Nebius adapter (endpoint allowlist, request profile, strict response validation, HTTP 400 diagnostics), the launcher, review workflow and context guards, Safety Gate wording, and public-demo isolation (including a headless run of the Streamlit app).
+- **244/244 automated tests passed in the verified public snapshot (commit `73e84a5`).** They cover the Nebius adapter (endpoint allowlist, request profile, strict response validation, HTTP 400 diagnostics), the launcher, review workflow and context guards, Safety Gate wording, and public-demo isolation (including a headless run of the Streamlit app).
 - **5/5 deterministic boundary probes pass.** Each probe feeds a deliberately unsafe `ROUTINE` proposal and checks that the Safety Gate escalates on its own:
 
 ```text
@@ -200,13 +224,21 @@ streamlit run streamlit_app.py
 
 The default execution mode is **Offline scripted replay (NO AI)**.
 
-### Run the public-demo configuration locally
+### Run the hosted-demo configuration locally
+
+The hosted deployment uses **`streamlit_public_app.py`** as its entry point. It forces `CARECANOPY_PUBLIC_DEMO=1` and does not expose the paid LIVE API mode.
+
+```bash
+streamlit run streamlit_public_app.py
+```
+
+Alternatively, to run the main app explicitly in public-demo mode:
 
 ```bash
 CARECANOPY_PUBLIC_DEMO=1 streamlit run streamlit_app.py
 ```
 
-On Windows PowerShell, set the flag with `$env:CARECANOPY_PUBLIC_DEMO = "1"` before running Streamlit. Do not provide Nebius or AWS credentials to a public deployment.
+On Windows PowerShell, set the flag with `$env:CARECANOPY_PUBLIC_DEMO = "1"` before running the main app. Do not provide Nebius or AWS credentials to a public deployment. **GitHub visibility and Streamlit app sharing permissions are separate settings; verify the hosted URL in a logged-out browser before submitting it for judging.**
 
 ### Reproduce LIVE Nemotron locally (private mode)
 
@@ -242,14 +274,15 @@ Never commit keys, `.env` files or `.streamlit/secrets.toml`. They are ignored b
 | State | DynamoDB + EventBridge proactive tasks | Local SQLite review store and event timeline (v1 AWS path kept as an optional legacy mode) |
 | Interface | Streamlit MVP | Three workspaces (Patient & AI · Clinical Review · Outcomes & Audit) with per-attempt status, so saved records are never shown as current results |
 | Public demo | — | Offline-only flag with execution-path blocking and per-session temporary databases |
-| Tests | Development cases + 5 probes | 242 automated tests + 5 probes |
+| Tests | Development cases + 5 probes | 244 verified automated tests in public snapshot + 5 probes |
 
 ---
 
 ## Project structure
 
 ```text
-streamlit_app.py            Streamlit entry point (three workspaces)
+streamlit_app.py            Main Streamlit app (three workspaces)
+streamlit_public_app.py     Hosted OFFLINE-only entry point (forces public demo mode)
 launch_private_nebius.py    Local private LIVE launcher (hidden key prompt, verified profile)
 diagnose_nebius.py          Network-blocked dry run of the Nebius request
 app/
