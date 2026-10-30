@@ -4,7 +4,15 @@
 
 **Demo quick start:** Select **DEV05 — Scope-boundary progression request**, click **Analyze & route follow-up**, open the simulated review, save an allowed decision with a rationale, and (if available) select **Record internal handoff**. The **Outcomes & Audit** workspace shows local workflow events. The hosted app does not call Nemotron; private LIVE inference is demonstrated separately in the submission video.
 
-> The hosted app uses **scripted synthetic replay (NO LIVE AI CALLS)**. Real NVIDIA Nemotron inference is available only in a separate private local mode and is demonstrated in the recorded evidence.
+> **LIVE NVIDIA NEMOTRON INFERENCE — IMPLEMENTED AND VERIFIED**
+
+CareCanopy makes real runtime inference calls to **NVIDIA Nemotron through Nebius Token Factory** in its **private local LIVE mode**. The recorded DEV04 demonstration shows a validated **CLARIFY** result and an independent Safety Gate evaluation (**no override**).
+
+**WHY THE HOSTED DEMO IS OFFLINE**
+
+The public Streamlit demo intentionally uses **scripted synthetic scenarios (NO LIVE AI CALLS)** to protect API credentials and prevent unrestricted paid inference. Both execution modes use synthetic cases. **No real patient data should be entered.**
+
+The repository includes instructions for reproducing LIVE Nemotron inference locally with authorized Nebius credentials.
 
 ### Safe follow-up routing for community post-stroke rehabilitation — NVIDIA Nemotron proposals, an independent Safety Gate, and human review
 
